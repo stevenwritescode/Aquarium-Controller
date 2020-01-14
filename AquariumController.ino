@@ -366,8 +366,11 @@ void change()
     fill();
   }
 
-  if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime)
-  {
+  if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime) {
+    fillRes();
+  }
+
+  if (changing && !draining && !filling && !fillingRes && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime && RTC.get() >= fillResStopTime) {
     changing = false;
   }
 }
