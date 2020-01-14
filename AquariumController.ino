@@ -39,13 +39,14 @@ bool moonOverride = false;
 bool sunButtonPressed = false;
 bool moonButtonPressed = false;
 bool previousSunOverride = sunOverride;
+bool doneOnce;
 
 time_t fillStopTime;
 time_t fillResStopTime;
 time_t drainStopTime;
 time_t volcanoStopTime;
+time_t volcanoDelay;
 
-randomSeed(analogRead(0));
 
 sunMoon sm;
 tmElements_t tm; // specific time
@@ -60,6 +61,7 @@ void printDate(time_t date)
 
 void setup()
 {
+  randomSeed(analogRead(4));
 
   tm.Second = 0;
   tm.Minute = 12;
@@ -388,32 +390,53 @@ void change()
 
 void volcano()
 {
+  if (doneOnce) {
+    return;
+  }
+  else if (second() == 0) {
+    doneOnce = true;
+
+  }
+  else if (second() == 1) {
+    doneOnce = false;
+    return;
+  }
+  else if (!erupting && volcanoDelay >= RTC.get()) {
+    return;
+  }
+  else if (second() != 0) {
+    return;
+  }
+
+
   int mildEruptionChance = 25;
   int badEruptionChance = 5;
   int randomNum = random(1, 100);
-  int duration = random(1, 300);
+  int volcanoDuration = random(1, 30);
 
-  if (!erupting && RTC.get() % 30 && randomNum <= mildEruptionChance)
-  {
+
+
+
+  if (!erupting && randomNum < mildEruptionChance) {
     digitalWrite(circulatorPin, LOW);
     erupting = true;
-    volcanoStopTime = RTC.get() + duration);
+    volcanoStopTime = RTC.get() + volcanoDuration;
+    Serial.print("erupting! "); Serial.print(randomNum); Serial.print(" "); Serial.println(volcanoDuration);
   }
-
-  else if (!erupting && RTC.get() % 30 && randomNum >= (100 - badEruptionChance))
-  {
+  else if (!erupting && randomNum > (100 - badEruptionChance)) {
     digitalWrite(circulatorPin, LOW);
     erupting = true;
     previousSunOverride = sunOverride;
     sunOverride = true;
     noSun();
-    volcanoStopTime = RTC.get() + duration);
-  }
-
-  else if (erupting && RTC.get() >= volcanoStopTime)
-  {
+    volcanoStopTime = RTC.get() + volcanoDuration;
+    Serial.println("erupting bad!");
+  } else if (erupting && RTC.get() >= volcanoStopTime) {
     digitalWrite(circulatorPin, HIGH);
     erupting = false;
+    Serial.println("done erupting.");
     sunOverride = previousSunOverride;
+    volcanoDelay = RTC.get() + 7200;
   }
+
 }
