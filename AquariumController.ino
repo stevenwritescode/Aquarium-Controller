@@ -355,18 +355,27 @@ void drain()
 void change()
 {
 
-  if (!changing)
-  {
+  if (changing && digitalRead(changeButton) == LOW) {
+    changing = false;
+    draining = false;
+    filling = false;
+    fillingRes = false;
+
+  }
+
+  if (!changing) {
     changing = true;
+    filling = false;
     drain();
   }
 
-  if (changing && !draining && RTC.get() >= drainStopTime)
-  {
+  if (changing && !draining && RTC.get() >= drainStopTime) {
+    fillingRes = false;
     fill();
   }
 
   if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime) {
+    filling = false;
     fillRes();
   }
 
