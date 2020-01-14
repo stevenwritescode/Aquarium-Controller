@@ -290,6 +290,7 @@ void fill()
   {
     Serial.println("could not fill because tank is full");
     filling = false;
+    fillStopTime = RTC.get();
     return;
   }
 
@@ -319,6 +320,7 @@ void fillRes()
   {
     Serial.println("could not fill because res is full");
     fillingRes = false;
+    fillResStopTime = RTC.get();
     return;
   }
 
