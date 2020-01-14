@@ -141,8 +141,8 @@ void setup()
 
 void loop()
 {
-  // put your main code here, to run repeatedly:
 
+  // button presses
   if (digitalRead(changeButton) == LOW || changing == true)
   {
     change();
@@ -205,20 +205,21 @@ void loop()
     moonButtonPressed = false;
   }
 
+  // daytime events
   if (RTC.get() > sm.sunRise() && RTC.get() < sm.sunSet())
   {
     sun();
     noMoon();
     volcano();
   }
-
+  // nighttime events
   else if (RTC.get() < sm.sunRise() || RTC.get() > sm.sunSet())
   {
     moon();
     noSun();
     volcano();
   }
-
+  // sunrise events
   else if (RTC.get() == sm.sunRise())
   {
     sunOverride = false;
@@ -227,7 +228,7 @@ void loop()
     moon();
     Serial.println("SUNRISE!!!!");
   }
-
+  // sunset events
   else if (RTC.get() == sm.sunSet())
   {
     sunOverride = false;
