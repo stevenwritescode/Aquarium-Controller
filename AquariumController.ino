@@ -24,9 +24,10 @@ int fillResButton = 13;
 int resFloatSensor = A0;
 int tankFloatSensor = A1;
 
-int fillTime = 60;
-int fillResTime = 1600;
-int drainTime = 60;
+int fillTime = 60 * 3;
+int fillResTime = 60 * 26.5;
+int drainTime = 60 * 2;
+int waterChangeDay = 7; // Sunday = 1 thru Saturday = 7
 
 bool filling = false;
 bool draining = false;
@@ -143,7 +144,6 @@ void setup()
 
 void loop()
 {
-
   // button presses
   if (digitalRead(changeButton) == LOW || changing == true)
   {
@@ -238,6 +238,11 @@ void loop()
     moon();
     sun();
     Serial.println("SUNSET!!!!");
+
+    if (dayOfWeek(RTC.get()) == waterChangeDay) {
+      change();
+      Serial.println("Performed a water change.");
+    }
   }
   else
   {
@@ -389,7 +394,7 @@ void change()
 }
 
 void volcano()
-{
+{ Serial.println(second());
   if (doneOnce) {
     return;
   }
@@ -409,28 +414,23 @@ void volcano()
   }
 
 
-  int mildEruptionChance = 25;
-  int badEruptionChance = 5;
+  int eruptionChance = 25;
   int randomNum = random(1, 100);
-  int volcanoDuration = random(1, 30);
+  int volcanoDuration = random(1, 60);
+  Serial.print(randomNum); 
+  Serial.print(' ');
+  if (randomNum > eruptionChance) {
+    Serial.print(' | The sea rumbles... | ');
+  } else {
+    Serial.print(' | Eruption! | ');
+  }
+  Serial.println(volcanoDuration);
 
-
-
-
-  if (!erupting && randomNum < mildEruptionChance) {
+  if (!erupting && randomNum <= eruptionChance) {
     digitalWrite(circulatorPin, LOW);
     erupting = true;
     volcanoStopTime = RTC.get() + volcanoDuration;
     Serial.print("erupting! "); Serial.print(randomNum); Serial.print(" "); Serial.println(volcanoDuration);
-  }
-  else if (!erupting && randomNum > (100 - badEruptionChance)) {
-    digitalWrite(circulatorPin, LOW);
-    erupting = true;
-    previousSunOverride = sunOverride;
-    sunOverride = true;
-    noSun();
-    volcanoStopTime = RTC.get() + volcanoDuration;
-    Serial.println("erupting bad!");
   } else if (erupting && RTC.get() >= volcanoStopTime) {
     digitalWrite(circulatorPin, HIGH);
     erupting = false;
