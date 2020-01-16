@@ -394,49 +394,67 @@ void change()
 }
 
 void volcano()
-{ Serial.println(second());
-  if (doneOnce) {
+{
+  Serial.println(second());
+
+  if (erupting && RTC.get() >= volcanoStopTime) {
+    stopErupting();
+  }
+  else if (second() == 0 && !doneOnce) {
+    doneOnce = true;
+  } else if (second() == 0 && doneOnce) {
     return;
   }
-  else if (second() == 0) {
-    doneOnce = true;
-
-  }
-  else if (second() == 1) {
+  else if (second() >= 1) {
     doneOnce = false;
     return;
   }
-  else if (!erupting && volcanoDelay >= RTC.get()) {
+
+  if (volcanoDelay >= RTC.get() && (volcanoDelay - RTC.get()) > 90) {
+    Serial.println("The sea sleeps.");
     return;
-  }
-  else if (second() != 0) {
+
+  } else if (volcanoDelay >= RTC.get() && (volcanoDelay - RTC.get()) <= 90) {
+  Serial.print(volcanoDelay - RTC.get());
+    Serial.println(" seconds until potential eruption.");
     return;
   }
 
 
-  int eruptionChance = 25;
-  int randomNum = random(1, 100);
-  int volcanoDuration = random(1, 60);
-  Serial.print(randomNum); 
-  Serial.print(' ');
-  if (randomNum > eruptionChance) {
-    Serial.print(' | The sea rumbles... | ');
+  if (second() != 0) {
+  return;
+}
+
+
+int eruptionChance = 25;
+                     int randomNum = random(1, 100);
+
+                     Serial.print(randomNum);
+                     Serial.print(" ");
+
+if (!erupting && randomNum <= eruptionChance) {
+  Serial.print("  Eruption!  ");
+    startErupting();
   } else {
-    Serial.print(' | Eruption! | ');
-  }
-  Serial.println(volcanoDuration);
-
-  if (!erupting && randomNum <= eruptionChance) {
-    digitalWrite(circulatorPin, LOW);
-    erupting = true;
-    volcanoStopTime = RTC.get() + volcanoDuration;
-    Serial.print("erupting! "); Serial.print(randomNum); Serial.print(" "); Serial.println(volcanoDuration);
-  } else if (erupting && RTC.get() >= volcanoStopTime) {
-    digitalWrite(circulatorPin, HIGH);
-    erupting = false;
-    Serial.println("done erupting.");
-    sunOverride = previousSunOverride;
-    volcanoDelay = RTC.get() + 7200;
+    Serial.println("  The sea rumbles...  ");
   }
 
+
+
+}
+
+void startErupting() {
+  int volcanoDuration = random(1, 60);
+  digitalWrite(circulatorPin, LOW);
+  erupting = true;
+  Serial.print(" It will last for "); Serial.print(volcanoDuration); Serial.println(" seconds.");
+
+  volcanoStopTime = RTC.get() + volcanoDuration;
+}
+
+void stopErupting() {
+  digitalWrite(circulatorPin, HIGH);
+  erupting = false;
+  Serial.println("done erupting.");
+  volcanoDelay = volcanoStopTime + 360;
 }
