@@ -2,32 +2,58 @@
 #include <TimeLib.h>
 #include <DS3232RTC.h>
 #include <sunMoon.h>
+#include <Bounce2.h>
+
 
 #define OUR_latitude 39.609824 // Centennial cordinates
 #define OUR_longtitude -104.73716
 #define OUR_timezone -420 // localtime with UTC difference in minutes
 
-int sunPin = 2;
-int moonPin = 3;
-int fillPumpPin = 4;
-int circulatorPin = 5;
-int fillResValvePin = 6;
-int fillValvePin = 7;
-int drainValvePin = A2;
-int relayEightPin = A3;
-int fillButton = 8;
-int drainButton = 9;
-int changeButton = 10;
-int sunButton = 11;
-int moonButton = 12;
-int fillResButton = 13;
-int resFloatSensor = A0;
-int tankFloatSensor = A1;
-
-int fillTime = 60 * 3;
-int fillResTime = 60 * 26.5;
 int drainTime = 60 * 2;
+int fillTime = 60 * 4.25;
+int fillResTime = 60 * 30;
 int waterChangeDay = 7; // Sunday = 1 thru Saturday = 7
+
+// 12v relay outs
+int sunPin = A0; //K1
+int moonPin = A1; //K2
+int fillResValvePin = A3; //K4
+int drainValvePin = A4; //K5
+int fillValvePin = A5; //K6
+
+//120v relay outs
+int fillPumpPin = A6; //K7
+int volcanoPin = A7; //K8
+
+// LED relay outs
+int feedLedPin = A8; //K9
+int sunLedPin = A9; //K10
+int moonLedPin = A10; //K11
+int changeLedPin = A11; //K12
+int fillLedPin = A12; //K13
+int drainLedPin = A13; //K14
+int fillResLedPin = A14; //K15
+
+
+int feedButton = 0;
+int sunButton = 22;
+int moonButton = 2;
+int changeButton = 3;
+int fillButton = 4;
+int drainButton = 5;
+int fillResButton = 6;
+int resFloatSensor = 7;
+int tankFloatSensor = 8;
+
+Bounce feedButtonBounce = Bounce();
+Bounce fillButtonBounce = Bounce();
+Bounce drainButtonBounce = Bounce();
+Bounce changeButtonBounce = Bounce();
+Bounce sunButtonBounce = Bounce();
+Bounce moonButtonBounce = Bounce();
+Bounce fillResBounce = Bounce();
+Bounce resFloatBounce = Bounce();
+Bounce tankFloatBounce = Bounce();
 
 bool filling = false;
 bool draining = false;
@@ -37,14 +63,12 @@ bool erupting = false;
 
 bool sunOverride = false;
 bool moonOverride = false;
-bool sunButtonPressed = false;
-bool moonButtonPressed = false;
-bool previousSunOverride = sunOverride;
 bool doneOnce;
 
 time_t fillStopTime;
-time_t fillResStopTime;
 time_t drainStopTime;
+time_t fillResStopTime;
+
 time_t volcanoStopTime;
 time_t volcanoDelay;
 
@@ -72,40 +96,74 @@ void setup()
   tm.Year = 2016 - 1970;
   time_t s_date = makeTime(tm);
 
-  Serial.begin(9600);
-  pinMode(sunPin, OUTPUT);
-  pinMode(moonPin, OUTPUT);
-  pinMode(fillPumpPin, OUTPUT);
-  pinMode(circulatorPin, OUTPUT);
-  pinMode(fillResValvePin, OUTPUT);
-  pinMode(fillValvePin, OUTPUT);
-  pinMode(drainValvePin, OUTPUT);
-  pinMode(relayEightPin, OUTPUT);
+  Serial.begin(19200);
 
-  pinMode(fillButton, INPUT_PULLUP);
-  pinMode(drainButton, INPUT_PULLUP);
-  pinMode(changeButton, INPUT_PULLUP);
-  pinMode(sunButton, INPUT_PULLUP);
-  pinMode(moonButton, INPUT_PULLUP);
-  pinMode(fillResButton, INPUT_PULLUP);
-  pinMode(resFloatSensor, INPUT_PULLUP);
-  pinMode(tankFloatSensor, INPUT_PULLUP);
+  pinMode(sunPin, OUTPUT); // K1
+  pinMode(moonPin, OUTPUT); // K2
+  pinMode(fillResValvePin, OUTPUT); //K4
+  pinMode(drainValvePin, OUTPUT); //K5
+  pinMode(fillValvePin, OUTPUT); //K6
+  pinMode(fillPumpPin, OUTPUT); //K7
+  pinMode(volcanoPin, OUTPUT); //K8
 
-  digitalWrite(sunPin, HIGH);
-  digitalWrite(moonPin, HIGH);
-  digitalWrite(fillPumpPin, HIGH);
-  digitalWrite(circulatorPin, HIGH);
-  digitalWrite(fillResValvePin, HIGH);
-  digitalWrite(drainValvePin, HIGH);
-  digitalWrite(fillValvePin, HIGH);
-  digitalWrite(relayEightPin, HIGH);
+  pinMode(feedLedPin, OUTPUT); //K9
+  pinMode(sunLedPin, OUTPUT); //K10
+  pinMode(moonLedPin, OUTPUT); //K11
+  pinMode(changeLedPin, OUTPUT); //K12
+  pinMode(fillLedPin, OUTPUT); //K13
+  pinMode(drainLedPin, OUTPUT); //K14
+  pinMode(fillResLedPin, OUTPUT); //K15
+
+  feedButtonBounce.attach(feedButton, INPUT_PULLUP);
+  feedButtonBounce.interval(100);
+
+  sunButtonBounce.attach(sunButton, INPUT_PULLUP);
+  sunButtonBounce.interval(100);
+
+  moonButtonBounce.attach(moonButton, INPUT_PULLUP);
+  moonButtonBounce.interval(100);
+
+  changeButtonBounce.attach(changeButton, INPUT_PULLUP);
+  changeButtonBounce.interval(100);
+
+  fillButtonBounce.attach(fillButton, INPUT_PULLUP);
+  fillButtonBounce.interval(100);
+
+  drainButtonBounce.attach(drainButton, INPUT_PULLUP);
+  drainButtonBounce.interval(100);
+
+  fillResBounce.attach(fillResButton, INPUT_PULLUP);
+  fillResBounce.interval(100);
+
+  resFloatBounce.attach(resFloatSensor, INPUT_PULLUP);
+  resFloatBounce.interval(100);
+
+  tankFloatBounce.attach(tankFloatSensor, INPUT_PULLUP);
+  tankFloatBounce.interval(100);
+
+  digitalWrite(sunPin, HIGH); // K1
+  digitalWrite(moonPin, HIGH); // K2
+  digitalWrite(fillResValvePin, HIGH); //K4
+  digitalWrite(drainValvePin, HIGH); //K5
+  digitalWrite(fillValvePin, HIGH); //K6
+  digitalWrite(fillPumpPin, HIGH); //K7
+  digitalWrite(volcanoPin, HIGH); //K8
+
+  digitalWrite(feedLedPin, LOW); //K9
+  digitalWrite(sunLedPin, HIGH); //K10
+  digitalWrite(moonLedPin, HIGH); //K11
+  digitalWrite(changeLedPin, HIGH); //K12
+  digitalWrite(fillLedPin, HIGH); //K13
+  digitalWrite(drainLedPin, HIGH); //K14
+  digitalWrite(fillResLedPin, HIGH); //K15
 
   setSyncProvider(RTC.get); // the function to get the time from the RTC
-  if (timeStatus() != timeSet)
+  if (timeStatus() != timeSet) {
     Serial.println("Unable to sync with the RTC");
-  else
+  } else {
     Serial.println("RTC has set the system time");
-  sm.init(OUR_timezone, OUR_latitude, OUR_longtitude);
+    sm.init(OUR_timezone, OUR_latitude, OUR_longtitude);
+  }
 
   Serial.print("Today is ");
   printDate(RTC.get());
@@ -127,84 +185,100 @@ void setup()
   printDate(sSet);
   Serial.println("");
 
-  Serial.print("Specific date was ");
-  printDate(s_date);
-  Serial.println("");
-  jDay = sm.julianDay(s_date);
-  mDay = sm.moonDay(s_date);
-  sRise = sm.sunRise(s_date);
-  sSet = sm.sunSet(s_date);
-  Serial.print("Specific date sunrise and sunset was: ");
-  Serial.print("Julian day of specific date was ");
-  Serial.println(jDay);
-  Serial.print("Moon age was ");
-  Serial.print(mDay);
-  Serial.println("day(s)");
+  //  Serial.print("Specific date was ");
+  //  printDate(s_date);
+  //  Serial.println("");
+  //  jDay = sm.julianDay(s_date);
+  //  mDay = sm.moonDay(s_date);
+  //  sRise = sm.sunRise(s_date);
+  //  sSet = sm.sunSet(s_date);
+  //  Serial.print("Specific date sunrise and sunset was: ");
+  //  Serial.print("Julian day of specific date was ");
+  //  Serial.println(jDay);
+  //  Serial.print("Moon age was ");
+  //  Serial.print(mDay);
+  //  Serial.println("day(s)");
+
+  delay(500);
 }
 
 void loop()
 {
+  feedButtonBounce.update();
+  sunButtonBounce.update();
+  moonButtonBounce.update();
+  changeButtonBounce.update();
+  fillButtonBounce.update();
+  drainButtonBounce.update();
+  fillResBounce.update();
+  resFloatBounce.update();
+  tankFloatBounce.update();
+
   // button presses
-  if (digitalRead(changeButton) == LOW || changing == true)
+  if (feedButtonBounce.fell())
+  {
+    Serial.println("Feed button pressed");
+    int feedLedState = digitalRead(feedLedPin);
+    digitalWrite(feedLedPin, !feedLedState);
+  }
+
+  if (sunButtonBounce.fell())
+  {
+    Serial.println("Sun button pressed");
+    sunOverride = !sunOverride;
+    int sunPinState = digitalRead(sunPin);
+    digitalWrite(sunPin, !sunPinState);
+  }
+
+  if (moonButtonBounce.fell())
+  {
+    Serial.println("Moon button pressed");
+    moonOverride = !moonOverride;
+    int moonPinState = digitalRead(moonPin);
+    digitalWrite(moonPin, !moonPinState);
+  }
+
+if (changing && changeButtonBounce.fell())
+  {
+    cancelChange();
+    return;
+  }
+  
+  if (changeButtonBounce.fell() || changing)
   {
     change();
   }
+  
+if (draining && drainButtonBounce.fell())
+  {
+    cancelDrain();
+    return;
+  }
 
-  if (digitalRead(fillButton) == LOW || filling == true)
+   if (filling && fillButtonBounce.fell())
+  {
+    cancelFill();
+    return;
+  }
+
+ if (fillingRes && fillResBounce.fell())
+  {
+    cancelFillRes();
+    return;
+  }
+  if (fillButtonBounce.fell() || filling)
   {
     fill();
   }
-
-  if (digitalRead(drainButton) == LOW || draining == true)
+  
+  if ((drainButtonBounce.fell() && !draining) || draining)
   {
     drain();
   }
 
-  if (digitalRead(fillResButton) == LOW || fillingRes == true)
+  if (fillResBounce.fell() || fillingRes)
   {
     fillRes();
-  }
-
-  if (sunButtonPressed)
-  {
-  }
-  else if (digitalRead(sunButton) == LOW && digitalRead(sunPin) == LOW)
-  {
-    sunOverride = !sunOverride;
-    sunButtonPressed = true;
-    digitalWrite(sunPin, HIGH);
-  }
-  else if (digitalRead(sunButton) == LOW && digitalRead(sunPin) == HIGH)
-  {
-    sunOverride = !sunOverride;
-    sunButtonPressed = true;
-    digitalWrite(sunPin, LOW);
-  }
-
-  if (moonButtonPressed)
-  {
-  }
-  else if (digitalRead(moonButton) == LOW && digitalRead(moonPin) == LOW)
-  {
-    moonOverride = !moonOverride;
-    moonButtonPressed = true;
-    digitalWrite(moonPin, HIGH);
-  }
-  else if (digitalRead(moonButton) == LOW && digitalRead(moonPin) == HIGH)
-  {
-    moonOverride = !moonOverride;
-    moonButtonPressed = true;
-    digitalWrite(moonPin, LOW);
-  }
-
-  if (digitalRead(sunButton) == HIGH)
-  {
-    sunButtonPressed = false;
-  }
-
-  if (digitalRead(moonButton) == HIGH)
-  {
-    moonButtonPressed = false;
   }
 
   // daytime events
@@ -224,6 +298,7 @@ void loop()
   // sunrise events
   else if (RTC.get() == sm.sunRise())
   {
+    digitalWrite(feedLedPin, LOW);
     sunOverride = false;
     moonOverride = false;
     sun();
@@ -241,17 +316,18 @@ void loop()
 
     if (dayOfWeek(RTC.get()) == waterChangeDay) {
       change();
-      Serial.println("Performed a water change.");
+      Serial.println("Performing a water change.");
     }
   }
   else
   {
-    Serial.println("ERROR");
+    //    Serial.println("ERROR");
   }
 }
 
 void sun()
 {
+  digitalWrite(sunLedPin, !sunOverride);
   if (!sunOverride)
   {
     digitalWrite(sunPin, LOW);
@@ -260,6 +336,7 @@ void sun()
 
 void noSun()
 {
+  digitalWrite(sunLedPin, !sunOverride);
   if (!sunOverride)
   {
     digitalWrite(sunPin, HIGH);
@@ -268,6 +345,8 @@ void noSun()
 
 void moon()
 {
+  digitalWrite(moonLedPin, !moonOverride);
+
   if (!moonOverride)
   {
     digitalWrite(moonPin, LOW);
@@ -276,6 +355,8 @@ void moon()
 
 void noMoon()
 {
+  digitalWrite(moonLedPin, !moonOverride);
+
   if (!moonOverride)
   {
     digitalWrite(moonPin, HIGH);
@@ -284,59 +365,66 @@ void noMoon()
 
 void fill()
 {
-  if (!filling && digitalRead(tankFloatSensor) == LOW)
+  if (!filling)
   {
     filling = true;
     fillStopTime = RTC.get() + fillTime;
     Serial.println("starting to fill");
     digitalWrite(fillPumpPin, LOW);
     digitalWrite(fillValvePin, LOW);
+    digitalWrite(fillLedPin, LOW);
   }
 
-  if (!filling && digitalRead(tankFloatSensor) == HIGH)
+  if (!filling && tankFloatBounce.read() == HIGH || tankFloatBounce.rose())
   {
     Serial.println("could not fill because tank is full");
     filling = false;
-    fillStopTime = RTC.get();
+    digitalWrite(fillPumpPin, HIGH);
+    digitalWrite(fillValvePin, HIGH);
+    digitalWrite(fillLedPin, HIGH);
+    fillResStopTime = RTC.get();
     return;
   }
 
-  Serial.println("filling");
-
-  if (filling && RTC.get() >= fillStopTime || digitalRead(tankFloatSensor) == HIGH)
+  if (filling && RTC.get() >= fillStopTime || tankFloatBounce.read() == HIGH || tankFloatBounce.rose())
   {
     filling = false;
     Serial.println("done filling");
     digitalWrite(fillPumpPin, HIGH);
     digitalWrite(fillValvePin, HIGH);
+    digitalWrite(fillLedPin, HIGH);
   }
 }
 
-void fillRes()
-{
-
-  if (!fillingRes && digitalRead(resFloatSensor) == LOW)
+void fillRes() {
+  if (!fillingRes)
   {
+
+
+    filling = false;
     fillingRes = true;
     fillResStopTime = RTC.get() + fillResTime;
     Serial.println("starting to fill res");
     digitalWrite(fillResValvePin, LOW);
+    digitalWrite(fillResLedPin, LOW);
   }
 
-  if (!fillingRes && digitalRead(resFloatSensor) == HIGH)
+  if (!fillingRes && resFloatBounce.read() == HIGH  || resFloatBounce.rose())
   {
-    Serial.println("could not fill because res is full");
-    fillingRes = false;
+    Serial.println("could not fill because res tank is full");
+    filling = false;
+    digitalWrite(fillResValvePin, HIGH);
+    digitalWrite(fillResLedPin, HIGH);
     fillResStopTime = RTC.get();
     return;
   }
 
-  Serial.println("filling res");
-  if (fillingRes && RTC.get() >= fillResStopTime || digitalRead(resFloatSensor) == HIGH)
+  if (fillingRes && RTC.get() >= fillResStopTime || resFloatBounce.read() == HIGH || resFloatBounce.rose())
   {
     fillingRes = false;
     Serial.println("done filling res");
     digitalWrite(fillResValvePin, HIGH);
+    digitalWrite(fillResLedPin, HIGH);
   }
 }
 
@@ -349,53 +437,70 @@ void drain()
     drainStopTime = RTC.get() + drainTime;
     Serial.println("starting to drain");
     digitalWrite(drainValvePin, LOW);
+    digitalWrite(drainLedPin, LOW);
   }
-
-  Serial.println("draining");
 
   if (draining && RTC.get() >= drainStopTime)
   {
     draining = false;
     Serial.println("done draining");
     digitalWrite(drainValvePin, HIGH);
+    digitalWrite(drainLedPin, HIGH);
   }
 }
 
-void change()
-{
+void cancelChange() {
+  changing = false;
+  digitalWrite(changeLedPin, HIGH);
+  cancelDrain();
+  cancelFill();
+  cancelFillRes();
+}
 
-  if (changing && digitalRead(changeButton) == LOW) {
-    changing = false;
-    draining = false;
-    filling = false;
-    fillingRes = false;
+void cancelDrain() {
+  draining = false;
+  Serial.println("draining canceled");
+  digitalWrite(drainValvePin, HIGH);
+  digitalWrite(drainLedPin, HIGH);
+}
 
-  }
+void cancelFill() {
+  filling = false;
+  Serial.println("filling canceled");
+  digitalWrite(fillValvePin, HIGH);
+  digitalWrite(fillLedPin, HIGH);
+}
 
+void cancelFillRes() {
+  fillingRes = false;
+  Serial.println("filling res canceled");
+  digitalWrite(fillResValvePin, HIGH);
+  digitalWrite(fillResLedPin, HIGH);
+}
+
+void change() {
   if (!changing) {
     changing = true;
-    filling = false;
+    digitalWrite(changeLedPin, LOW);
     drain();
   }
 
   if (changing && !draining && RTC.get() >= drainStopTime) {
-    fillingRes = false;
     fill();
   }
-
-  if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime) {
-    filling = false;
+  
+  if (changing && !draining && !filling && RTC.get() >= drainStopTime && RTC.get() >= fillStopTime) {
     fillRes();
   }
-
-  if (changing && !draining && !filling && !fillingRes && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime && RTC.get() >= fillResStopTime) {
+  
+  if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime) {
     changing = false;
+    digitalWrite(changeLedPin, HIGH);
   }
 }
 
 void volcano()
 {
-  Serial.println(second());
 
   if (erupting && RTC.get() >= volcanoStopTime) {
     stopErupting();
@@ -415,28 +520,28 @@ void volcano()
     return;
 
   } else if (volcanoDelay >= RTC.get() && (volcanoDelay - RTC.get()) <= 90) {
-  Serial.print(volcanoDelay - RTC.get());
+    Serial.print(volcanoDelay - RTC.get());
     Serial.println(" seconds until potential eruption.");
     return;
   }
 
 
   if (second() != 0) {
-  return;
-}
+    return;
+  }
 
 
-int eruptionChance = 25;
-                     int randomNum = random(1, 100);
+  int eruptionChance = 25;
+  int randomNum = random(1, 100);
 
-                     Serial.print(randomNum);
-                     Serial.print(" ");
+  //  Serial.print(randomNum);
+  //  Serial.print(" ");
 
-if (!erupting && randomNum <= eruptionChance) {
-  Serial.print("  Eruption!  ");
+  if (!erupting && randomNum <= eruptionChance) {
+    //    Serial.print("  Eruption!  ");
     startErupting();
   } else {
-    Serial.println("  The sea rumbles...  ");
+    //    Serial.println("  The sea rumbles...  ");
   }
 
 
@@ -445,16 +550,16 @@ if (!erupting && randomNum <= eruptionChance) {
 
 void startErupting() {
   int volcanoDuration = random(1, 60);
-  digitalWrite(circulatorPin, LOW);
+  digitalWrite(volcanoPin, LOW);
   erupting = true;
-  Serial.print(" It will last for "); Serial.print(volcanoDuration); Serial.println(" seconds.");
+  //  Serial.print(" It will last for "); Serial.print(volcanoDuration); Serial.println(" seconds.");
 
   volcanoStopTime = RTC.get() + volcanoDuration;
 }
 
 void stopErupting() {
-  digitalWrite(circulatorPin, HIGH);
+  digitalWrite(volcanoPin, HIGH);
   erupting = false;
-  Serial.println("done erupting.");
+  //  Serial.println("done erupting.");
   volcanoDelay = volcanoStopTime + 360;
 }
