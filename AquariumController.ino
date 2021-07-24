@@ -3,6 +3,7 @@
 #include <DS3232RTC.h>
 #include <sunMoon.h>
 #include <Bounce2.h>
+#include <OneButton.h>
 
 
 #define OUR_latitude 39.609824 // Centennial cordinates
@@ -12,6 +13,7 @@
 int drainTime = 60 * 2;
 int fillTime = 60 * 4.25;
 int fillResTime = 60 * 30;
+int blinkInterval = 1000;
 int waterChangeDay = 7; // Sunday = 1 thru Saturday = 7
 
 // 12v relay outs
@@ -45,7 +47,7 @@ int fillResButton = 6;
 int resFloatSensor = 7;
 int tankFloatSensor = 8;
 
-Bounce feedButtonBounce = Bounce();
+OneButton feedButtonBounce(feedButton, true, true);
 Bounce fillButtonBounce = Bounce();
 Bounce drainButtonBounce = Bounce();
 Bounce changeButtonBounce = Bounce();
@@ -54,6 +56,7 @@ Bounce moonButtonBounce = Bounce();
 Bounce fillResBounce = Bounce();
 Bounce resFloatBounce = Bounce();
 Bounce tankFloatBounce = Bounce();
+Bounce vacationButtonBounce = Bounce();
 
 bool filling = false;
 bool draining = false;
@@ -65,12 +68,16 @@ bool sunOverride = false;
 bool moonOverride = false;
 bool doneOnce;
 
+bool vacationMode = false;
+
 time_t fillStopTime;
 time_t drainStopTime;
 time_t fillResStopTime;
 
 time_t volcanoStopTime;
 time_t volcanoDelay;
+
+time_t vacationModeBlinkDelay;
 
 
 sunMoon sm;
@@ -114,8 +121,9 @@ void setup()
   pinMode(drainLedPin, OUTPUT); //K14
   pinMode(fillResLedPin, OUTPUT); //K15
 
-  feedButtonBounce.attach(feedButton, INPUT_PULLUP);
-  feedButtonBounce.interval(100);
+  feedButtonBounce.attachClick(feed);
+  feedButtonBounce.attachLongPressStart(toggleVacationMode);
+  feedButtonBounce.setPressTicks(3000); 
 
   sunButtonBounce.attach(sunButton, INPUT_PULLUP);
   sunButtonBounce.interval(100);
@@ -140,6 +148,9 @@ void setup()
 
   tankFloatBounce.attach(tankFloatSensor, INPUT_PULLUP);
   tankFloatBounce.interval(100);
+
+  vacationButtonBounce.attach(feedButton, INPUT_PULLUP);
+  vacationButtonBounce.interval(3000);
 
   digitalWrite(sunPin, HIGH); // K1
   digitalWrite(moonPin, HIGH); // K2
@@ -204,7 +215,7 @@ void setup()
 
 void loop()
 {
-  feedButtonBounce.update();
+  feedButtonBounce.tick();
   sunButtonBounce.update();
   moonButtonBounce.update();
   changeButtonBounce.update();
@@ -213,14 +224,6 @@ void loop()
   fillResBounce.update();
   resFloatBounce.update();
   tankFloatBounce.update();
-
-  // button presses
-  if (feedButtonBounce.fell())
-  {
-    Serial.println("Feed button pressed");
-    int feedLedState = digitalRead(feedLedPin);
-    digitalWrite(feedLedPin, !feedLedState);
-  }
 
   if (sunButtonBounce.fell())
   {
@@ -238,30 +241,30 @@ void loop()
     digitalWrite(moonPin, !moonPinState);
   }
 
-if (changing && changeButtonBounce.fell())
+  if (changing && changeButtonBounce.fell())
   {
     cancelChange();
     return;
   }
-  
+
   if (changeButtonBounce.fell() || changing)
   {
     change();
   }
-  
-if (draining && drainButtonBounce.fell())
+
+  if (draining && drainButtonBounce.fell())
   {
     cancelDrain();
     return;
   }
 
-   if (filling && fillButtonBounce.fell())
+  if (filling && fillButtonBounce.fell())
   {
     cancelFill();
     return;
   }
 
- if (fillingRes && fillResBounce.fell())
+  if (fillingRes && fillResBounce.fell())
   {
     cancelFillRes();
     return;
@@ -270,7 +273,7 @@ if (draining && drainButtonBounce.fell())
   {
     fill();
   }
-  
+
   if ((drainButtonBounce.fell() && !draining) || draining)
   {
     drain();
@@ -298,7 +301,7 @@ if (draining && drainButtonBounce.fell())
   // sunrise events
   else if (RTC.get() == sm.sunRise())
   {
-    digitalWrite(feedLedPin, LOW);
+    if (!vacationMode) { digitalWrite(feedLedPin, LOW); }
     sunOverride = false;
     moonOverride = false;
     sun();
@@ -314,7 +317,7 @@ if (draining && drainButtonBounce.fell())
     sun();
     Serial.println("SUNSET!!!!");
 
-    if (dayOfWeek(RTC.get()) == waterChangeDay) {
+    if (dayOfWeek(RTC.get()) == waterChangeDay && !vacationMode) {
       change();
       Serial.println("Performing a water change.");
     }
@@ -478,6 +481,13 @@ void cancelFillRes() {
   digitalWrite(fillResLedPin, HIGH);
 }
 
+
+void feed() {
+  Serial.println("Feed button pressed");
+  int feedLedState = digitalRead(feedLedPin);
+  digitalWrite(feedLedPin, !feedLedState);
+}
+
 void change() {
   if (!changing) {
     changing = true;
@@ -488,11 +498,11 @@ void change() {
   if (changing && !draining && RTC.get() >= drainStopTime) {
     fill();
   }
-  
+
   if (changing && !draining && !filling && RTC.get() >= drainStopTime && RTC.get() >= fillStopTime) {
     fillRes();
   }
-  
+
   if (changing && !draining && !filling && RTC.get() >= fillStopTime && RTC.get() >= drainStopTime) {
     changing = false;
     digitalWrite(changeLedPin, HIGH);
@@ -562,4 +572,60 @@ void stopErupting() {
   erupting = false;
   //  Serial.println("done erupting.");
   volcanoDelay = volcanoStopTime + 360;
+}
+
+void toggleVacationMode() {
+  if (!vacationMode) {
+    Serial.println("Vacation mode enabled");
+    vacationMode = true;
+    blinkThrice();
+  } else {
+    Serial.println("Vacation mode disabled");
+    vacationMode = false;
+    blinkTwice();
+  }
+}
+
+void allLightsOff() {
+  digitalWrite(feedLedPin, HIGH); //K9
+  digitalWrite(sunLedPin, HIGH); //K10
+  digitalWrite(moonLedPin, HIGH); //K11
+  digitalWrite(changeLedPin, HIGH); //K12
+  digitalWrite(fillLedPin, HIGH); //K13
+  digitalWrite(drainLedPin, HIGH); //K14
+  digitalWrite(fillResLedPin, HIGH); //K15
+}
+
+void allLightsOn () {
+  digitalWrite(feedLedPin, LOW); //K9
+  digitalWrite(sunLedPin, LOW); //K10
+  digitalWrite(moonLedPin, LOW); //K11
+  digitalWrite(changeLedPin, LOW); //K12
+  digitalWrite(fillLedPin, LOW); //K13
+  digitalWrite(drainLedPin, LOW); //K14
+  digitalWrite(fillResLedPin, LOW); //K15
+}
+
+void blinkTwice() {
+  allLightsOn();
+  delay(blinkInterval);
+  allLightsOff();
+  delay(blinkInterval);
+  allLightsOn();
+  delay(blinkInterval);
+  allLightsOff();
+}
+
+void blinkThrice() {
+  allLightsOn();
+  delay(blinkInterval);
+  allLightsOff();
+  delay(blinkInterval);
+  allLightsOn();
+  delay(blinkInterval);
+  allLightsOff();
+  delay(blinkInterval);
+  allLightsOn();
+  delay(blinkInterval);
+  allLightsOff();
 }
